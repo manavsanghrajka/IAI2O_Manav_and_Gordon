@@ -1,0 +1,4 @@
+,temperature_2m_mean,precipitation_sum,rain_sum,snowfall_sum,relative_humidity_2m_mean,surface_pressure_mean,soil_moisture_mean,soil_temperature_mean
+Incidence Rate,0.1144,-0.2811,-0.2811,,-0.2531,-0.0362,0.1590,0.0069
+Infection Prevalence,0.1210,-0.2926,-0.2926,,-0.2618,-0.0906,0.1304,0.0395
+Mortality Rate,0.1213,-0.0922,-0.0922,,-0.1573,-0.7851,-0.2026,0.5514

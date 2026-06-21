@@ -1,0 +1,8 @@
+services:
+  ai-mechanistic-model:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data

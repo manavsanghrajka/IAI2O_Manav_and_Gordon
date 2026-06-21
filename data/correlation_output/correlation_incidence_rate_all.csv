@@ -1,0 +1,7 @@
+,temperature_2m_mean,precipitation_sum,rain_sum,snowfall_sum,relative_humidity_2m_mean,surface_pressure_mean,soil_moisture_mean,soil_temperature_mean
+All Regions (Pooled),0.5198,0.3436,0.3496,-0.3749,-0.4195,0.0124,-0.1510,0.4988
+"Beni, DRC",-0.5923,0.5504,0.5504,,0.5133,-0.6419,0.6439,-0.5936
+"Delhi, India",0.0031,-0.2498,-0.2498,,-0.1840,-0.1721,0.0920,-0.0538
+"Heilongjiang, China",,,,,,,,
+"Nairobi, Kenya",-0.5387,-0.0803,-0.0803,,0.1232,-0.0946,-0.1137,-0.2774
+"Zinder, Niger",0.1144,-0.2811,-0.2811,,-0.2531,-0.0362,0.1590,0.0069
