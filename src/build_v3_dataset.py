@@ -5,10 +5,10 @@ import pandas as pd
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
 
-V2_DATA = os.path.join(DATA_DIR, "test_results", "pooled_drc_data_v2.csv")
-CHIRPS_DATA = os.path.join(DATA_DIR, "raw_climate_malaria", "chirps_precip_drc.csv")
-WHO_DATA = os.path.join(DATA_DIR, "raw_climate_malaria", "who_itn_coverage_drc.csv")
-V3_DATA = os.path.join(DATA_DIR, "test_results", "pooled_drc_data_v3.csv")
+V2_DATA = os.path.join(DATA_DIR, "test_results", "pooled_global_data_v2_full.csv")
+CHIRPS_DATA = os.path.join(DATA_DIR, "raw_climate_malaria", "chirps_precip_global_full.csv")
+WHO_DATA = os.path.join(DATA_DIR, "raw_climate_malaria", "who_itn_coverage_global_full.csv")
+V3_DATA = os.path.join(DATA_DIR, "test_results", "pooled_global_data_v3_full.csv")
 
 # Baseline params
 BASELINE_A = 0.3
@@ -69,14 +69,15 @@ def main():
     who_df = pd.read_csv(WHO_DATA)
     
     print("Merging CHIRPS Precipitation...")
-    # Drop the ERA5 precipitation
+    # Drop the ERA5 precipitation if exists
     if 'precipitation_sum' in v2_df.columns:
         v2_df.drop(columns=['precipitation_sum'], inplace=True)
         
-    merged1 = pd.merge(v2_df, chirps_df, on=['Region', 'Year'], how='inner')
+    chirps_df.rename(columns={'Region': 'Name'}, inplace=True)
+    merged1 = pd.merge(v2_df, chirps_df, on=['Name', 'Year'], how='inner')
     
     print("Merging WHO ITN Coverage...")
-    merged2 = pd.merge(merged1, who_df, on='Year', how='left')
+    merged2 = pd.merge(merged1, who_df, on=['Year', 'ISO3'], how='left')
     
     print("Recalculating Vectorial Capacity with dynamic ITN & CHIRPS...")
     import numpy as np

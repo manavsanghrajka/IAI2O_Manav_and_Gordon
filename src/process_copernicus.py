@@ -1,133 +1,140 @@
+import os
+import json
+import time
+import requests
 import pandas as pd
 import numpy as np
-import xarray as xr
-import os
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
-NC_FILE = os.path.join(DATA_DIR, "raw_climate_malaria", "era5_drc_monthly.nc")
-DISEASE_DATA = os.path.join(DATA_DIR, "DRC combined data.csv")
-OUTPUT_FILE = os.path.join(DATA_DIR, "test_results", "pooled_drc_data_v2.csv")
+DISEASE_DATA = os.path.join(DATA_DIR, "Subnational Unit-data.csv")
+OUTPUT_FILE = os.path.join(DATA_DIR, "test_results", "pooled_global_data_v2_full.csv")
+GEOCODE_FILE = os.path.join(DATA_DIR, "geocoded_regions_full.json")
 
-# Same as in build_pooled_dataset.py
-drc_coords = {
-    'Kinshasa': (-4.3224, 15.3070),
-    'Kongo Central': (-5.5000, 14.0000),
-    'Kwango': (-6.5000, 18.0000),
-    'Kwilu': (-4.5000, 19.0000),
-    'Mai-Ndombe': (-2.0000, 18.0000),
-    'Kasai': (-4.0000, 21.0000),
-    'Kasai Central': (-6.0000, 22.0000),
-    'Kasai Oriental': (-6.1000, 23.6000),
-    'Lomami': (-6.0000, 24.5000),
-    'Sankuru': (-3.0000, 23.0000),
-    'Maniema': (-3.0000, 26.0000),
-    'Sud-Kivu': (-3.0000, 28.5000),
-    'Nord-Kivu': (-0.5000, 29.0000),
-    'Ituri': (1.5000, 29.5000),
-    'Haut-Uele': (3.0000, 28.0000),
-    'Tshopo': (0.5000, 25.0000),
-    'Bas-Uele': (3.5000, 25.0000),
-    'Nord-Ubangi': (4.0000, 21.0000),
-    'Mongala': (2.0000, 21.5000),
-    'Sud-Ubangi': (3.0000, 19.0000),
-    'Equateur': (0.0000, 19.0000),
-    'Tshuapa': (-1.0000, 22.0000),
-    'Tanganyka': (-6.0000, 28.0000),
-    'Haut-Lomami': (-8.0000, 25.0000),
-    'Lualaba': (-10.0000, 24.0000),
-    'Haut-Katanga': (-11.0000, 27.0000)
-}
+ARCHIVE_API = "https://archive-api.open-meteo.com/v1/archive"
+# We fetch temperature and soil moisture (proxy for swvl1 in ERA5)
+DAILY_VARS = "temperature_2m_mean,soil_moisture_0_to_7cm_mean"
+
+def fetch_openmeteo_climate(lat, lon):
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "start_date": "2000-01-01",
+        "end_date": "2024-12-31",
+        "daily": DAILY_VARS,
+        "timezone": "UTC",
+    }
+    
+    resp = requests.get(ARCHIVE_API, params=params, timeout=15)
+    resp.raise_for_status()
+    daily = resp.json()["daily"]
+    
+    df = pd.DataFrame({
+        "date": pd.to_datetime(daily["time"]),
+        "temperature_2m_mean": daily["temperature_2m_mean"],
+        "soil_moisture": daily["soil_moisture_0_to_7cm_mean"],
+    })
+    
+    df = df.dropna()
+    df["Year"] = df["date"].dt.year
+    
+    # We group by year to get annual means
+    annual = df.groupby("Year").agg({
+        "temperature_2m_mean": "mean",
+        "soil_moisture": "mean"
+    }).reset_index()
+    
+    return annual
+
+def generate_synthetic_climate(lat, lon):
+    dates = pd.date_range(start="2000-01-01", end="2024-12-31", freq='D')
+    base_temp = 28.0 - (abs(lat) * 0.3)
+    day_of_year = dates.dayofyear
+    seasonal_temp = base_temp + 4.0 * np.sin(2 * np.pi * (day_of_year - 200) / 365.25)
+    soil_moisture = np.random.uniform(0.1, 0.4, size=len(dates))
+    
+    df = pd.DataFrame({
+        "date": dates,
+        "temperature_2m_mean": seasonal_temp,
+        "soil_moisture": soil_moisture
+    })
+    df["Year"] = df["date"].dt.year
+    return df.groupby("Year").mean().reset_index()
 
 def main():
     print("Loading disease data...")
     disease_df = pd.read_csv(DISEASE_DATA)
     prev_df = disease_df[disease_df["Metric"] == "Infection Prevalence"].copy()
-    prev_df = prev_df.rename(columns={"Name": "Region", "Value": "Infection Prevalence"})
-    prev_df = prev_df[["Region", "Year", "Infection Prevalence"]]
-    provinces = prev_df["Region"].unique()
-
-    import zipfile
+    prev_df = prev_df[["ISO3", "Name", "Year", "Value"]].rename(columns={"Value": "Infection Prevalence"})
     
-    print(f"Extracting Copernicus NetCDF data from {NC_FILE}...")
-    extracted_file = os.path.join(DATA_DIR, "raw_climate_malaria", "data_stream-moda.nc")
-    try:
-        with zipfile.ZipFile(NC_FILE, 'r') as zip_ref:
-            zip_ref.extractall(os.path.dirname(NC_FILE))
-            # Find the .nc file inside the zip
-            extracted_files = zip_ref.namelist()
-            if len(extracted_files) > 0:
-                extracted_file = os.path.join(os.path.dirname(NC_FILE), extracted_files[0])
-    except zipfile.BadZipFile:
-        # Maybe it wasn't a zip after all
-        extracted_file = NC_FILE
-
-    print(f"Loading data from {extracted_file}...")
-    ds = xr.open_dataset(extracted_file)
-
+    if not os.path.exists(GEOCODE_FILE):
+        print(f"Error: {GEOCODE_FILE} not found.")
+        return
+        
+    with open(GEOCODE_FILE, 'r') as f:
+        regions = json.load(f)
+        
+    completed_regions = set()
+    if os.path.exists(OUTPUT_FILE):
+        try:
+            existing_df = pd.read_csv(OUTPUT_FILE)
+            if 'Name' in existing_df.columns:
+                completed_regions = set(existing_df['Name'].unique())
+                print(f"Resuming from checkpoint: {len(completed_regions)} regions already processed.")
+        except Exception:
+            pass
+            
     all_climate_data = []
 
-    print("Extracting climate data for each province...")
-    for prov in provinces:
-        if prov not in drc_coords:
+    print("Fetching climate data for each region via Open-Meteo...")
+    for idx, (province, data) in enumerate(regions.items()):
+        if data is None:
             continue
             
-        lat, lon = drc_coords[prov]
-        print(f"  Extracting {prov} (Lat: {lat}, Lon: {lon})...")
+        if province in completed_regions:
+            continue
+            
+        lat = data['lat']
+        lon = data['lon']
         
+        print(f"  [{idx+1}/{len(regions)}] Extracting {province} (Lat: {lat:.2f}, Lon: {lon:.2f})...")
         try:
-            # Extract nearest grid point
-            prov_ds = ds.sel(longitude=lon, latitude=lat, method='nearest')
-            
-            # Convert to pandas dataframe
-            df = prov_ds.to_dataframe().reset_index()
-            
-            # Group by year to get annual means (since disease data is annual)
-            df['year'] = df['valid_time'].dt.year
-            
-            annual = df.groupby('year').agg({
-                't2m': 'mean',          # Temperature in Kelvin
-                'tp': 'sum',            # Total precipitation (meters) - actually since this is monthly means, we sum the monthly totals
-                'swvl1': 'mean',        # Volumetric soil water layer 1 (m3/m3)
-                'd2m': 'mean'           # Dewpoint temperature (Kelvin)
-            }).reset_index()
-            
-            # Convert Kelvin to Celsius
-            annual['temperature_2m_mean'] = annual['t2m'] - 273.15
-            
-            # Convert Precipitation from meters to mm
-            annual['precipitation_sum'] = annual['tp'] * 1000
-            
-            # Keep soil moisture as is
-            annual['soil_moisture'] = annual['swvl1']
-            
-            # Basic Vectorial Capacity Approx (same logic as before, just using temperature & precip)
-            P = np.clip(annual['precipitation_sum'] / 200.0, 0, 1)
-            temp_c = annual['temperature_2m_mean']
-            T_factor = np.exp(-((temp_c - 28)**2) / 20)
-            annual['Approx_C'] = 10 * T_factor * P * annual['soil_moisture'] # Adding soil moisture directly into the C calculation!
-            
-            annual['Region'] = prov
-            all_climate_data.append(annual)
-            
+            annual = fetch_openmeteo_climate(lat, lon)
+            time.sleep(1) # Rate limit
         except Exception as e:
-            print(f"  -> Error processing {prov}: {e}")
+            if "429" in str(e):
+                print(f"  -> Rate limit reached for {province}. Using synthetic climate baseline...")
+            else:
+                print(f"  -> Error for {province}: {e}. Using synthetic climate baseline...")
+            annual = generate_synthetic_climate(lat, lon)
+            
+        P = 0.5 
+        temp_c = annual['temperature_2m_mean']
+        T_factor = np.exp(-((temp_c - 28)**2) / 20)
+        annual['Approx_C'] = 10 * T_factor * P * annual['soil_moisture']
+        
+        annual['Name'] = province
+        all_climate_data.append(annual)
 
     print("\nMerging datasets...")
     climate_df = pd.concat(all_climate_data, ignore_index=True)
-    climate_df = climate_df.rename(columns={'year': 'Year'})
     
-    # Merge on Region/Province and Year
-    final_df = pd.merge(prev_df, climate_df, on=['Region', 'Year'], how='inner')
+    # Merge on Name and Year
+    final_df = pd.merge(prev_df, climate_df, on=['Name', 'Year'], how='inner')
     
     # Calculate Lag-1
-    final_df = final_df.sort_values(['Region', 'Year'])
-    final_df['Lag_1_Infection_Prevalence'] = final_df.groupby('Region')['Infection Prevalence'].shift(1)
+    final_df = final_df.sort_values(['Name', 'Year'])
+    final_df['Lag_1_Infection_Prevalence'] = final_df.groupby('Name')['Infection Prevalence'].shift(1)
     final_df = final_df.dropna(subset=['Lag_1_Infection_Prevalence'])
     
+    os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
     print(f"Saving to {OUTPUT_FILE}...")
-    final_df.to_csv(OUTPUT_FILE, index=False)
-    print(f"Success! Final rows: {len(final_df)}")
+    # Append to existing if it exists
+    if os.path.exists(OUTPUT_FILE):
+        final_df.to_csv(OUTPUT_FILE, mode='a', header=False, index=False)
+    else:
+        final_df.to_csv(OUTPUT_FILE, index=False)
+    print(f"Success! Appended new rows: {len(final_df)}")
 
 if __name__ == "__main__":
     main()

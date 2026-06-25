@@ -1,6 +1,6 @@
 # Hybrid AI-Mechanistic Malaria Risk Predictor
 
-**Authors:** Manav Sanghrajka & Gordon Li — The Woodlands School
+**Authors:** Manav Sanghrajka & Gordon Li
 
 A hybrid epidemiological forecasting system that combines XGBoost climate prediction with Ross-Macdonald vectorial capacity modeling to forecast malaria transmission risk across multiple regions.
 

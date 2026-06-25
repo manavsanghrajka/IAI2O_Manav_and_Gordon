@@ -15,17 +15,17 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 # Config & Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
-DATA_FILE = os.path.join(DATA_DIR, "test_results", "pooled_drc_data_v3.csv")
-OUTPUT_CSV = os.path.join(DATA_DIR, "test_results", "pooled_delta_results.csv")
+DATA_FILE = os.path.join(DATA_DIR, "test_results", "pooled_global_data_v3_full.csv")
+OUTPUT_CSV = os.path.join(DATA_DIR, "test_results", "pooled_delta_results_full.csv")
 GRAPH_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "accuracy_graphs")
-LOCAL_MD = os.path.join(GRAPH_DIR, "pooled_delta_model_summary.md")
+LOCAL_MD = os.path.join(GRAPH_DIR, "pooled_delta_model_summary_full.md")
 
-# Define features (Removed Lag-1 to force reliance on climate/interventions)
+# Define features
 FEATURES = ['temperature_2m_mean', 'precipitation_sum', 'soil_moisture', 'Approx_C', 'ITN_Coverage']
 
 def main():
     print("="*60)
-    print("Delta Forecasting Validation (Target: 26 DRC Provinces)")
+    print("Delta Forecasting Validation")
     print("="*60)
     
     if not os.path.exists(DATA_FILE):
@@ -35,12 +35,17 @@ def main():
     df = pd.read_csv(DATA_FILE)
     
     # 1. Clean and create Lag 1 & Delta
-    # MUST group by Region so lags don't cross over
-    df = df.sort_values(by=["Region", "Year"])
-    df["Lag_1_Infection_Prevalence"] = df.groupby("Region")["Infection Prevalence"].shift(1)
+    # MUST group by Name so lags don't cross over
+    df = df.sort_values(by=["Name", "Year"])
+    df["Lag_1_Infection_Prevalence"] = df.groupby("Name")["Infection Prevalence"].shift(1)
     df["Delta_Infection_Prevalence"] = df["Infection Prevalence"] - df["Lag_1_Infection_Prevalence"]
     
-    df = df.dropna(subset=FEATURES + ["Lag_1_Infection_Prevalence", "Delta_Infection_Prevalence", "Infection Prevalence"])
+    # Add one-hot encoded country columns
+    df = pd.get_dummies(df, columns=["ISO3"], prefix="ISO3")
+    iso3_cols = [col for col in df.columns if col.startswith("ISO3_")]
+    
+    current_features = FEATURES + iso3_cols
+    df = df.dropna(subset=current_features + ["Lag_1_Infection_Prevalence", "Delta_Infection_Prevalence", "Infection Prevalence"])
     
     # 2. Train/Test Split
     train_df = df[df["Year"] <= 2019].copy()
@@ -49,14 +54,13 @@ def main():
     print(f"Training set: {len(train_df)} rows")
     print(f"Testing set: {len(test_df)} rows")
     
-    cat_features = ["Region"]
     target = "Delta_Infection_Prevalence"
     
     # Preprocessor
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', StandardScaler(), FEATURES),
-            ('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=False), cat_features)
+            ('passthrough', 'passthrough', iso3_cols)
         ])
         
     models = {
@@ -69,10 +73,9 @@ def main():
     best_name = ""
     best_model = None
     
-    X_train = train_df[FEATURES + cat_features]
+    X_train = train_df[current_features]
     y_train = train_df[target].values
     
-    # Track the best absolute predictions
     best_train_abs = None
     best_test_abs = None
     
@@ -80,39 +83,27 @@ def main():
         print(f"\nTraining {name} on Delta...")
         pipeline.fit(X_train, y_train)
         
-        # Predict Delta on train set and reconstruct absolute
         train_pred_delta = pipeline.predict(X_train)
         train_pred_abs = train_df["Lag_1_Infection_Prevalence"].values + train_pred_delta
-        # Clip to valid percentage
         train_pred_abs = np.clip(train_pred_abs, 0, 100)
         
-        # Recursive prediction on Test set
         test_df_copy = test_df.copy()
         
-        for region in test_df_copy["Region"].unique():
-            region_test = test_df_copy[test_df_copy["Region"] == region].sort_values("Year")
+        for name_val in test_df_copy["Name"].unique():
+            region_test = test_df_copy[test_df_copy["Name"] == name_val].sort_values("Year")
             if len(region_test) == 0:
                 continue
                 
-            # The "starting point" for recursion is the actual 2019 value
             current_abs_pred = region_test.iloc[0]["Lag_1_Infection_Prevalence"]
             
             for idx, row in region_test.iterrows():
                 row_df = pd.DataFrame([row])
-                
-                # Predict delta
-                pred_delta = pipeline.predict(row_df[FEATURES + cat_features])[0]
-                
-                # Reconstruct absolute
+                pred_delta = pipeline.predict(row_df[current_features])[0]
                 pred_abs = current_abs_pred + pred_delta
                 pred_abs = np.clip(pred_abs, 0, 100)
-                
                 test_df_copy.at[idx, "Predicted_Infection_Prevalence"] = pred_abs
-                
-                # Carry over to next year
                 current_abs_pred = pred_abs
                 
-        # Evaluate absolute predictions
         mae = mean_absolute_error(test_df_copy["Infection Prevalence"], test_df_copy["Predicted_Infection_Prevalence"])
         train_mae = mean_absolute_error(train_df["Infection Prevalence"], train_pred_abs)
         
@@ -182,10 +173,10 @@ def main():
     plt.close()
     
     # 2. Representative Time Series
-    target_regions = ["Tshopo", "Mongala", "Sud-Kivu"]
+    target_regions = final_df['Name'].unique()[:3]
     
     for reg in target_regions:
-        reg_df = final_df[final_df["Region"] == reg].sort_values("Year")
+        reg_df = final_df[final_df["Name"] == reg].sort_values("Year")
         if len(reg_df) == 0:
             continue
             
@@ -201,7 +192,8 @@ def main():
         plt.legend()
         plt.tight_layout()
         
-        reg_graph_path = os.path.join(GRAPH_DIR, f"delta_temporal_{reg}.png")
+        safe_reg = reg.replace("/", "_")
+        reg_graph_path = os.path.join(GRAPH_DIR, f"delta_temporal_{safe_reg}.png")
         plt.savefig(reg_graph_path, dpi=300)
         plt.close()
         
@@ -216,7 +208,7 @@ The model was forced to use CHIRPS Precipitation, WHO ITN Coverage, and Vectoria
 
 ## Model Setup
 - **Algorithm:** {best_name} Regressor (Trained on Delta)
-- **Features:** Temperature, CHIRPS Precipitation, Soil Moisture, Vectorial Capacity, WHO ITN Coverage, and One-Hot Encoded `Region`. (Lag-1 completely removed as a feature!)
+- **Features:** Temperature, CHIRPS Precipitation, Soil Moisture, Vectorial Capacity, WHO ITN Coverage, and One-Hot Encoded `ISO3`. (Lag-1 completely removed as a feature!)
 - **Validation:** Global Temporal Holdout (Trained on 2000-2019 all regions, Tested recursively on 2020-2024 all regions)
 
 ## Global Absolute Accuracy Metrics (Holdout Test Set)
@@ -233,10 +225,10 @@ The model was forced to use CHIRPS Precipitation, WHO ITN Coverage, and Vectoria
     md += """
 ## Graphs
 ![Global Accuracy Scatter](./delta_global_scatter.png)
-![Tshopo Accuracy](./delta_temporal_Tshopo.png)
-![Mongala Accuracy](./delta_temporal_Mongala.png)
-![Sud-Kivu Accuracy](./delta_temporal_Sud-Kivu.png)
 """
+    for reg in target_regions:
+        safe_reg = reg.replace("/", "_")
+        md += f"![{reg} Accuracy](./delta_temporal_{safe_reg}.png)\n"
     with open(LOCAL_MD, "w") as f:
         f.write(md)
         

@@ -1,0 +1,124 @@
+{
+    "Kaskazini Unguja": {
+        "lat": -5.9347636,
+        "lon": 39.2842761,
+        "query": "Kaskazini Unguja, Tanzania",
+        "country": "Tanzania"
+    },
+    "Perak": {
+        "lat": 4.812181,
+        "lon": 100.9797908,
+        "query": "Perak, Malaysia",
+        "country": "Malaysia"
+    },
+    "Sarawak": {
+        "lat": 2.5023855,
+        "lon": 112.9547283,
+        "query": "Sarawak, Malaysia",
+        "country": "Malaysia"
+    },
+    "Mwaro": {
+        "lat": -3.4650043,
+        "lon": 29.6708508,
+        "query": "Mwaro, Burundi",
+        "country": "Burundi"
+    },
+    "Grand Kru": {
+        "lat": 4.84932,
+        "lon": -8.3308845,
+        "query": "Grand Kru, Liberia",
+        "country": "Liberia"
+    },
+    "Cascades": {
+        "lat": 10.3071813,
+        "lon": -4.4351893,
+        "query": "Cascades, Burkina Faso",
+        "country": "Burkina Faso"
+    },
+    "Dayr Az Zor": {
+        "lat": 34.9477275,
+        "lon": 39.4767805,
+        "query": "Dayr Az Zor, Syria",
+        "country": "Syria"
+    },
+    "Upper West": {
+        "lat": 10.3669525,
+        "lon": -2.0921426,
+        "query": "Upper West, Ghana",
+        "country": "Ghana"
+    },
+    "Xaignabouly": {
+        "lat": 20.0171109,
+        "lon": 103.378253,
+        "query": "Laos",
+        "country": "Laos",
+        "fallback": true
+    },
+    "Rangpur": {
+        "lat": 25.6376135,
+        "lon": 89.0826381,
+        "query": "Rangpur, Bangladesh",
+        "country": "Bangladesh"
+    },
+    "Eastern Equatoria": {
+        "lat": 5.283932,
+        "lon": 33.5912329,
+        "query": "Eastern Equatoria, South Sudan",
+        "country": "South Sudan"
+    },
+    "Lang Son": {
+        "lat": 21.8487579,
+        "lon": 106.6140692,
+        "query": "Lang Son, Vietnam",
+        "country": "Vietnam"
+    },
+    "Kavango": {
+        "lat": -19.2632632,
+        "lon": 17.708643,
+        "query": "Kavango, Namibia",
+        "country": "Namibia"
+    },
+    "Medea": {
+        "lat": 36.265344,
+        "lon": 2.766957,
+        "query": "Medea, Algeria",
+        "country": "Algeria"
+    },
+    "El Oro": {
+        "lat": -3.5311093,
+        "lon": -79.8333234,
+        "query": "El Oro, Ecuador",
+        "country": "Ecuador"
+    },
+    "Barima/Waini (Region n1)": {
+        "lat": 4.8417097,
+        "lon": -58.6416891,
+        "query": "Guyana",
+        "country": "Guyana",
+        "fallback": true
+    },
+    "Svay Rieng": {
+        "lat": 11.1950082,
+        "lon": 105.7967967,
+        "query": "Svay Rieng, Cambodia",
+        "country": "Cambodia"
+    },
+    "Yanggang-do": {
+        "lat": 36.1298458,
+        "lon": 127.7549875,
+        "query": "Yanggang-do, North Korea",
+        "country": "North Korea"
+    },
+    "Qinghai": {
+        "lat": 36.0,
+        "lon": 96.0,
+        "query": "Qinghai, China",
+        "country": "China"
+    },
+    "San Pedro": {
+        "lat": -24.25,
+        "lon": -56.5,
+        "query": "San Pedro, Paraguay",
+        "country": "Paraguay"
+    }
+}
